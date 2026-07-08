@@ -1,0 +1,514 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Red de Monitoreo Hídrico — Cuenca de Atitlán</title>
+
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,500;9..144,600;9..144,700&family=IBM+Plex+Sans:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.4/chart.umd.min.js"></script>
+
+<style>
+  :root{
+    --bg-deep:#122127;
+    --bg-panel:#1B333A;
+    --bg-panel-raised:#20404A;
+    --line:#2E4B52;
+    --ink:#EAF1EF;
+    --ink-muted:#96AEAA;
+    --ink-faint:#6C8985;
+    --rain:#57ABC9;
+    --rain-soft:#3E7C93;
+    --clay:#C97A45;
+    --moss:#A8C256;
+    --radius:14px;
+  }
+
+  *{ box-sizing:border-box; }
+  html{ scroll-behavior:smooth; }
+
+  body{
+    margin:0;
+    background:var(--bg-deep);
+    color:var(--ink);
+    font-family:'IBM Plex Sans', sans-serif;
+    line-height:1.5;
+  }
+
+  .contour-bg{
+    position:absolute; inset:0;
+    width:100%; height:100%;
+    opacity:0.16;
+    pointer-events:none;
+  }
+
+  h1,h2,h3{ font-family:'Fraunces', serif; font-weight:600; margin:0; }
+  .mono{ font-family:'IBM Plex Mono', monospace; }
+
+  a{ color:var(--rain); }
+
+  .wrap{ max-width:1180px; margin:0 auto; padding:0 24px; }
+
+  /* ---------- HERO ---------- */
+  header.hero{
+    position:relative;
+    overflow:hidden;
+    border-bottom:1px solid var(--line);
+    padding:64px 0 48px;
+  }
+  .eyebrow{
+    font-family:'IBM Plex Mono', monospace;
+    text-transform:uppercase;
+    letter-spacing:0.14em;
+    font-size:12px;
+    color:var(--rain);
+    margin-bottom:18px;
+  }
+  header.hero h1{
+    font-size:clamp(32px, 5vw, 52px);
+    line-height:1.08;
+    max-width:820px;
+    color:var(--ink);
+  }
+  header.hero p.lede{
+    max-width:600px;
+    color:var(--ink-muted);
+    font-size:17px;
+    margin-top:18px;
+  }
+
+  .hero-kpis{
+    position:relative;
+    display:flex;
+    gap:40px;
+    flex-wrap:wrap;
+    margin-top:44px;
+  }
+  .hero-kpi .num{
+    font-family:'Fraunces', serif;
+    font-size:44px;
+    font-weight:600;
+    color:var(--rain);
+    line-height:1;
+  }
+  .hero-kpi .label{
+    margin-top:6px;
+    font-size:13px;
+    color:var(--ink-faint);
+    text-transform:uppercase;
+    letter-spacing:0.06em;
+  }
+
+  /* ---------- SECTIONS ---------- */
+  section{ padding:56px 0; border-bottom:1px solid var(--line); }
+  section.no-border{ border-bottom:none; }
+
+  .section-head{ margin-bottom:28px; max-width:640px; }
+  .section-head .eyebrow{ margin-bottom:10px; }
+  .section-head h2{ font-size:26px; color:var(--ink); }
+  .section-head p{ color:var(--ink-muted); margin-top:8px; font-size:15px; }
+
+  /* ---------- MAP ---------- */
+  #map{
+    height:460px;
+    border-radius:var(--radius);
+    border:1px solid var(--line);
+    overflow:hidden;
+  }
+  .leaflet-popup-content-wrapper{
+    background:var(--bg-panel-raised); color:var(--ink);
+    border-radius:10px; font-family:'IBM Plex Sans', sans-serif;
+  }
+  .leaflet-popup-tip{ background:var(--bg-panel-raised); }
+  .leaflet-popup-content b{ font-family:'Fraunces', serif; }
+
+  .legend{ display:flex; gap:22px; margin-top:16px; flex-wrap:wrap; }
+  .legend-item{ display:flex; align-items:center; gap:8px; font-size:13px; color:var(--ink-muted); }
+  .dot{ width:11px; height:11px; border-radius:50%; display:inline-block; }
+
+  /* ---------- KPI GRID ---------- */
+  .kpi-grid{ display:grid; grid-template-columns:repeat(4, 1fr); gap:16px; }
+  @media (max-width:900px){ .kpi-grid{ grid-template-columns:repeat(2, 1fr); } }
+  .kpi-card{
+    background:var(--bg-panel);
+    border:1px solid var(--line);
+    border-radius:var(--radius);
+    padding:22px;
+  }
+  .kpi-card .num{ font-family:'Fraunces', serif; font-size:30px; color:var(--ink); }
+  .kpi-card .num.accent{ color:var(--clay); }
+  .kpi-card .label{ margin-top:6px; font-size:12.5px; color:var(--ink-faint); text-transform:uppercase; letter-spacing:0.05em; }
+
+  /* ---------- CHARTS ---------- */
+  .chart-panel{
+    background:var(--bg-panel);
+    border:1px solid var(--line);
+    border-radius:var(--radius);
+    padding:24px;
+  }
+  .chart-panel h3{ font-size:16px; margin-bottom:4px; color:var(--ink); }
+  .chart-panel .sub{ font-size:13px; color:var(--ink-faint); margin-bottom:18px; }
+  .chart-grid{ display:grid; grid-template-columns:1.3fr 1fr; gap:20px; }
+  @media (max-width:900px){ .chart-grid{ grid-template-columns:1fr; } }
+  canvas{ max-height:320px; }
+
+  /* ---------- TABLE ---------- */
+  table{ width:100%; border-collapse:collapse; font-size:14px; }
+  thead th{
+    text-align:left; font-family:'IBM Plex Mono', monospace; font-size:11.5px;
+    text-transform:uppercase; letter-spacing:0.05em; color:var(--ink-faint);
+    padding:10px 14px; border-bottom:1px solid var(--line);
+  }
+  tbody td{ padding:12px 14px; border-bottom:1px solid var(--line); color:var(--ink-muted); }
+  tbody tr:hover{ background:rgba(87,171,201,0.06); }
+  td.num{ font-family:'IBM Plex Mono', monospace; color:var(--ink); }
+  td.loc{ color:var(--ink); }
+
+  .table-wrap{
+    background:var(--bg-panel); border:1px solid var(--line); border-radius:var(--radius);
+    overflow-x:auto;
+  }
+
+  .status{
+    display:inline-flex; align-items:center; gap:8px;
+    font-family:'IBM Plex Mono', monospace; font-size:12.5px; color:var(--ink-faint);
+  }
+  .status .pulse{
+    width:8px; height:8px; border-radius:50%; background:var(--moss);
+    box-shadow:0 0 0 0 rgba(168,194,86,0.6);
+    animation:pulse 2s infinite;
+  }
+  @keyframes pulse{
+    0%{ box-shadow:0 0 0 0 rgba(168,194,86,0.5); }
+    70%{ box-shadow:0 0 0 8px rgba(168,194,86,0); }
+    100%{ box-shadow:0 0 0 0 rgba(168,194,86,0); }
+  }
+
+  .empty-note{
+    color:var(--ink-faint); font-size:14px; padding:20px; text-align:center;
+  }
+
+  footer{ padding:36px 0 60px; }
+  footer p{ color:var(--ink-faint); font-size:12.5px; }
+
+  @media (prefers-reduced-motion: reduce){
+    .status .pulse{ animation:none; }
+    html{ scroll-behavior:auto; }
+  }
+</style>
+</head>
+<body>
+
+<header class="hero">
+  <svg class="contour-bg" viewBox="0 0 1200 400" preserveAspectRatio="none" aria-hidden="true">
+    <path d="M0,320 C150,280 250,340 400,300 C550,260 650,330 800,290 C950,250 1050,310 1200,270" fill="none" stroke="#57ABC9" stroke-width="1"/>
+    <path d="M0,260 C150,220 250,280 400,240 C550,200 650,270 800,230 C950,190 1050,250 1200,210" fill="none" stroke="#57ABC9" stroke-width="1"/>
+    <path d="M0,200 C150,160 250,220 400,180 C550,140 650,210 800,170 C950,130 1050,190 1200,150" fill="none" stroke="#57ABC9" stroke-width="1"/>
+    <path d="M0,140 C150,100 250,160 400,120 C550,80 650,150 800,110 C950,70 1050,130 1200,90" fill="none" stroke="#57ABC9" stroke-width="1"/>
+  </svg>
+  <div class="wrap">
+    <div class="eyebrow">Sololá · Cuenca del Lago de Atitlán</div>
+    <h1>Red de Monitoreo Hídrico<br>de Pluviómetros y Estaciones</h1>
+    <p class="lede">Lecturas de campo tomadas por observadores comunitarios en 24 puntos de la cuenca, sincronizadas directamente desde KoboToolbox.</p>
+
+    <div class="hero-kpis">
+      <div class="hero-kpi">
+        <div class="num" id="kpi-total-mm">—</div>
+        <div class="label">mm acumulados registrados</div>
+      </div>
+      <div class="hero-kpi">
+        <div class="num" id="kpi-lecturas">—</div>
+        <div class="label">lecturas totales</div>
+      </div>
+      <div class="hero-kpi">
+        <div class="num" id="kpi-estaciones">24</div>
+        <div class="label">puntos de monitoreo</div>
+      </div>
+      <div class="hero-kpi">
+        <div class="num" id="kpi-activos">—</div>
+        <div class="label">observadores con datos</div>
+      </div>
+    </div>
+  </div>
+</header>
+
+<section id="mapa">
+  <div class="wrap">
+    <div class="section-head">
+      <div class="eyebrow">Mapa de referencia</div>
+      <h2>Estaciones y pluviómetros de la cuenca</h2>
+      <p>Ubicación de los 24 instrumentos instalados. Los datos de lluvia recientes se muestran por separado, agrupados por código de observador.</p>
+    </div>
+    <div id="map"></div>
+    <div class="legend">
+      <span class="legend-item"><span class="dot" style="background:#57ABC9"></span> Estación Meteorológica</span>
+      <span class="legend-item"><span class="dot" style="background:#C97A45"></span> Pluviómetro + Termómetro HOBO</span>
+      <span class="legend-item"><span class="dot" style="background:#A8C256"></span> Pluviómetro</span>
+    </div>
+  </div>
+</section>
+
+<section id="resumen">
+  <div class="wrap">
+    <div class="section-head">
+      <div class="eyebrow">En vivo desde Kobo</div>
+      <h2>Resumen de lluvia registrada</h2>
+      <span class="status"><span class="pulse"></span><span id="status-text">conectando con KoboToolbox…</span></span>
+    </div>
+    <div class="kpi-grid">
+      <div class="kpi-card">
+        <div class="num accent" id="kpi-max-punto">—</div>
+        <div class="label">Punto con más lluvia acumulada</div>
+      </div>
+      <div class="kpi-card">
+        <div class="num" id="kpi-max-mm">—</div>
+        <div class="label">mm acumulados en ese punto</div>
+      </div>
+      <div class="kpi-card">
+        <div class="num" id="kpi-ultimo-fecha">—</div>
+        <div class="label">Fecha del último registro</div>
+      </div>
+      <div class="kpi-card">
+        <div class="num" id="kpi-ultimo-punto">—</div>
+        <div class="label">Registrado por</div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section id="graficas">
+  <div class="wrap">
+    <div class="section-head">
+      <div class="eyebrow">Tendencias</div>
+      <h2>Lluvia por punto y en el tiempo</h2>
+    </div>
+    <div class="chart-grid">
+      <div class="chart-panel">
+        <h3>Acumulado por código de observador (mm)</h3>
+        <div class="sub">Suma de todas las lecturas históricas por punto</div>
+        <canvas id="chartPorPunto"></canvas>
+      </div>
+      <div class="chart-panel">
+        <h3>Lluvia acumulada por mes (mm)</h3>
+        <div class="sub">Todas las estaciones, últimos 12 meses con datos</div>
+        <canvas id="chartPorMes"></canvas>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section id="tabla" class="no-border">
+  <div class="wrap">
+    <div class="section-head">
+      <div class="eyebrow">Detalle</div>
+      <h2>Últimas lecturas registradas</h2>
+    </div>
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr>
+            <th>Fecha y hora</th>
+            <th>Observador / Ubicación</th>
+            <th>Lluvia (mm)</th>
+          </tr>
+        </thead>
+        <tbody id="tabla-body">
+          <tr><td colspan="3" class="empty-note">Cargando datos…</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+</section>
+
+<footer>
+  <div class="wrap">
+    <p>Datos de lectura sincronizados en vivo desde KoboToolbox (actualización cada ~5 minutos). Ubicación de estaciones tomada del inventario de instrumentos de la cuenca. Última carga de esta página: <span id="footer-updated" class="mono"></span>.</p>
+  </div>
+</footer>
+
+<script>
+/* ---------------- Datos estáticos de estaciones ---------------- */
+const ESTACIONES = [{"name": "chuitzanchaj - CEDRACC", "tipo": "Estaciones Meteorológicas", "lat": 14.74329163160354, "lon": -91.24059692620716}, {"name": "Panajachel - VM", "tipo": "Estaciones Meteorológicas", "lat": 14.738764255565966, "lon": -91.15223054740181}, {"name": "Santa Clara la Laguna", "tipo": "Estaciones Meteorológicas", "lat": 14.714944222797673, "lon": -91.30481539651328}, {"name": "Casa Santa Rita", "tipo": "Estaciones Meteorológicas", "lat": 14.8027777020294, "lon": -91.24384635122811}, {"name": "CoAtitlán - Santiago Atitlán", "tipo": "Estaciones Meteorológicas", "lat": 14.617520210489376, "lon": -91.24127446734275}, {"name": "Lomas de Atitlán - San Andres Semetabaj", "tipo": "Estaciones Meteorológicas", "lat": 14.744681288310858, "lon": -91.13902210288768}, {"name": "Caserío Chuacruz - Aldea Pujujil I - Sololá", "tipo": "Estaciones Meteorológicas", "lat": 14.820021910882536, "lon": -91.16495401001953}, {"name": "Escuela de Formación Agrícola, Sololá,", "tipo": "Estaciones Meteorológicas", "lat": 14.762714699024173, "lon": -91.16937907288587}, {"name": "Xesampual", "tipo": "Pluviómetro + Termómetro HOBO", "lat": 14.810731066985227, "lon": -91.27912387456712}, {"name": "El Progreso Xajaxac", "tipo": "Pluviómetro + Termómetro HOBO", "lat": 14.844483957069029, "lon": -91.17523703725942}, {"name": "Las Minas", "tipo": "Pluviómetro + Termómetro HOBO", "lat": 14.766869598353308, "lon": -91.20890430379058}, {"name": "Chuquel", "tipo": "Pluviómetro + Termómetro HOBO", "lat": 14.800028899014535, "lon": -91.22421844882234}, {"name": "Chaquiya", "tipo": "Pluviómetro + Termómetro HOBO", "lat": 14.825592257676588, "lon": -91.19533939050041}, {"name": "Pahaj", "tipo": "Pluviómetro + Termómetro HOBO", "lat": 14.785684852673851, "lon": -91.29135295827234}, {"name": "Santa Maria Visitación", "tipo": "Pluviómetro + Termómetro HOBO", "lat": 14.717358664171057, "lon": -91.3094622025186}, {"name": "Paquip", "tipo": "Pluviómetro + Termómetro HOBO", "lat": 14.695774408961881, "lon": -91.3213601810275}, {"name": "Pasajquim", "tipo": "Pluviómetro + Termómetro HOBO", "lat": 14.657884364971498, "lon": -91.34299694765099}, {"name": "Pamezabal", "tipo": "Pluviómetro + Termómetro HOBO", "lat": 14.759132092272297, "lon": -91.29967894292884}, {"name": "Nueva Santa Catarina Ixtahucan", "tipo": "Pluviómetro + Termómetro HOBO", "lat": 14.853737342404486, "lon": -91.35632661987756}, {"name": "Panimatzalam", "tipo": "Pluviómetro + Termómetro HOBO", "lat": 14.753393841152896, "lon": -91.11098268310428}, {"name": "Palestina, San Juan la Laguna", "tipo": "Pluviómetro + Termómetro HOBO", "lat": 14.68339873756173, "lon": -91.30916809093463}, {"name": "Quixaya, San Lucas Tolimán", "tipo": "Pluviómetro + Termómetro HOBO", "lat": 14.531306579335192, "lon": -91.12847069906348}, {"name": "Chuitzanchaj - CEDRACC", "tipo": "Pluviómetro", "lat": 14.743525271873864, "lon": -91.22725526152107}, {"name": "Finca Santa Victoria", "tipo": "Pluviómetro + Termómetro HOBO", "lat": 14.769172265687587, "lon": -91.13423766283785}];
+
+const TIPO_COLOR = {
+  "Estaciones Meteorológicas": "#57ABC9",
+  "Pluviómetro + Termómetro HOBO": "#C97A45",
+  "Pluviómetro": "#A8C256"
+};
+
+/* ---------------- Mapa ---------------- */
+const map = L.map('map', { scrollWheelZoom:false }).setView([14.74, -91.24], 11);
+L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+  attribution: '&copy; OpenStreetMap contributors',
+  maxZoom: 17
+}).addTo(map);
+
+ESTACIONES.forEach(function(st){
+  const color = TIPO_COLOR[st.tipo] || "#96AEAA";
+  L.circleMarker([st.lat, st.lon], {
+    radius: 7,
+    color: color,
+    fillColor: color,
+    fillOpacity: 0.85,
+    weight: 1.5
+  }).addTo(map).bindPopup(`<b>${st.name}</b><br>${st.tipo}`);
+});
+
+/* ---------------- Utilidades de detección de columnas ---------------- */
+function findKey(record, keywords){
+  const keys = Object.keys(record);
+  for (const k of keys){
+    const nk = k.toLowerCase();
+    if (keywords.some(kw => nk.includes(kw))) return k;
+  }
+  return null;
+}
+
+function toNumber(v){
+  if (v === null || v === undefined || v === "") return null;
+  const n = parseFloat(String(v).replace(",", "."));
+  return isNaN(n) ? null : n;
+}
+
+function formatMonth(d){
+  return d.toLocaleDateString('es-GT', { year:'numeric', month:'short' });
+}
+
+/* ---------------- Carga de datos en vivo ---------------- */
+async function cargarDatos(){
+  const statusText = document.getElementById('status-text');
+  try {
+    const res = await fetch('/api/data');
+    const data = await res.json();
+
+    if (data.error) throw new Error(data.error);
+    if (!Array.isArray(data) || data.length === 0){
+      statusText.textContent = 'sin registros disponibles todavía';
+      document.getElementById('tabla-body').innerHTML =
+        '<tr><td colspan="3" class="empty-note">Aún no hay lecturas en el formulario.</td></tr>';
+      return;
+    }
+
+    const sample = data[0];
+    const fechaKey = findKey(sample, ['fecha','date','_submission_time']) || '_submission_time';
+    const lugarKey = findKey(sample, ['ubicac','observador','nombre']);
+    const lluviaKey = findKey(sample, ['lluvia','precipit','mm']);
+
+    const registros = data.map(r => ({
+      fecha: r[fechaKey] ? new Date(r[fechaKey]) : null,
+      lugar: lugarKey ? (r[lugarKey] || 'Sin dato') : 'Sin dato',
+      mm: toNumber(lluviaKey ? r[lluviaKey] : null)
+    })).filter(r => r.fecha && !isNaN(r.fecha.getTime()));
+
+    registros.sort((a,b) => b.fecha - a.fecha);
+
+    // ---- KPIs generales ----
+    const totalMm = registros.reduce((s,r) => s + (r.mm || 0), 0);
+    document.getElementById('kpi-total-mm').textContent = totalMm.toFixed(1);
+    document.getElementById('kpi-lecturas').textContent = registros.length;
+
+    const puntosUnicos = new Set(registros.map(r => r.lugar));
+    document.getElementById('kpi-activos').textContent = puntosUnicos.size;
+
+    // ---- Acumulado por punto ----
+    const porPunto = {};
+    registros.forEach(r => {
+      porPunto[r.lugar] = (porPunto[r.lugar] || 0) + (r.mm || 0);
+    });
+    const puntosOrdenados = Object.entries(porPunto).sort((a,b) => b[1]-a[1]);
+
+    if (puntosOrdenados.length){
+      document.getElementById('kpi-max-punto').textContent = puntosOrdenados[0][0];
+      document.getElementById('kpi-max-mm').textContent = puntosOrdenados[0][1].toFixed(1) + ' mm';
+    }
+
+    const ultimo = registros[0];
+    document.getElementById('kpi-ultimo-fecha').textContent =
+      ultimo.fecha.toLocaleDateString('es-GT', { day:'2-digit', month:'short', year:'numeric' });
+    document.getElementById('kpi-ultimo-punto').textContent = ultimo.lugar;
+
+    statusText.textContent = 'conectado — ' + registros.length + ' lecturas sincronizadas';
+
+    // ---- Gráfica: acumulado por punto ----
+    new Chart(document.getElementById('chartPorPunto'), {
+      type: 'bar',
+      data: {
+        labels: puntosOrdenados.map(p => p[0]),
+        datasets: [{
+          data: puntosOrdenados.map(p => p[1].toFixed(1)),
+          backgroundColor: '#57ABC9',
+          borderRadius: 4,
+          maxBarThickness: 26
+        }]
+      },
+      options: {
+        indexAxis: 'y',
+        plugins: { legend: { display:false } },
+        scales: {
+          x: { grid:{ color:'#2E4B52' }, ticks:{ color:'#96AEAA' } },
+          y: { grid:{ display:false }, ticks:{ color:'#EAF1EF', font:{ family:'IBM Plex Mono', size:11 } } }
+        }
+      }
+    });
+
+    // ---- Gráfica: acumulado por mes ----
+    const porMes = {};
+    registros.forEach(r => {
+      const key = r.fecha.getFullYear() + '-' + String(r.fecha.getMonth()+1).padStart(2,'0');
+      porMes[key] = (porMes[key] || 0) + (r.mm || 0);
+    });
+    const mesesOrdenados = Object.keys(porMes).sort().slice(-12);
+
+    new Chart(document.getElementById('chartPorMes'), {
+      type: 'line',
+      data: {
+        labels: mesesOrdenados.map(k => {
+          const [y,m] = k.split('-');
+          return formatMonth(new Date(parseInt(y), parseInt(m)-1, 1));
+        }),
+        datasets: [{
+          data: mesesOrdenados.map(k => porMes[k].toFixed(1)),
+          borderColor: '#C97A45',
+          backgroundColor: 'rgba(201,122,69,0.15)',
+          fill: true,
+          tension: 0.35,
+          pointBackgroundColor: '#C97A45'
+        }]
+      },
+      options: {
+        plugins: { legend: { display:false } },
+        scales: {
+          x: { grid:{ display:false }, ticks:{ color:'#96AEAA', font:{ size:11 } } },
+          y: { grid:{ color:'#2E4B52' }, ticks:{ color:'#96AEAA' } }
+        }
+      }
+    });
+
+    // ---- Tabla de últimas lecturas ----
+    const filas = registros.slice(0, 15).map(r => `
+      <tr>
+        <td class="mono">${r.fecha.toLocaleString('es-GT', { day:'2-digit', month:'short', year:'numeric', hour:'2-digit', minute:'2-digit' })}</td>
+        <td class="loc">${r.lugar}</td>
+        <td class="num">${r.mm !== null ? r.mm.toFixed(2) : '—'}</td>
+      </tr>
+    `).join('');
+    document.getElementById('tabla-body').innerHTML = filas;
+
+  } catch (err) {
+    statusText.textContent = 'error al conectar: ' + err.message;
+    document.getElementById('tabla-body').innerHTML =
+      '<tr><td colspan="3" class="empty-note">No se pudieron cargar los datos. Verifica el proxy y el token en Cloudflare Pages.</td></tr>';
+  }
+}
+
+document.getElementById('footer-updated').textContent = new Date().toLocaleString('es-GT');
+cargarDatos();
+setInterval(cargarDatos, 5 * 60 * 1000); // refresca cada 5 minutos
+</script>
+
+</body>
+</html>
