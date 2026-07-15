@@ -1,9 +1,23 @@
 // Worker principal: sirve los archivos estáticos (public/) y maneja /api/data
 // como proxy seguro hacia KoboToolbox. El token vive como secret (KOBO_TOKEN),
 // nunca en el código ni en el navegador.
+//
+// El formulario "monitoreo" cambió de estructura varias veces con los años,
+// así que la cantidad de lluvia y el tipo de lluvia pueden vivir en distintos
+// campos según cuándo se envió cada lectura. Este archivo combina todas las
+// variantes conocidas (confirmadas contra una exportación real del formulario)
+// en un solo valor limpio por registro.
 
 const KOBO_SERVER = "https://eu.kobotoolbox.org";
 const ASSET_UID = "ayNmjvKNvSNZTkQb8uMPPg";
+
+// Nombres de campo confirmados contra la exportación XLSX técnica del formulario.
+const FECHA_CANDIDATOS = ["_1_Fecha_y_hora_en_q_e_se_toma_la_lectura"];
+const LUGAR_CANDIDATOS = ["_2_Ubicaci_n_Nombre_del_observador"];
+const MM_DIRECTO_CANDIDATOS = ["_4_cantidad_de_lluvia_mm", "_4_Cantidad_de_lluvia_Plg_mm"];
+const PLG_CANDIDATOS = ["_5_cantidad_de_lluvia_en_plg"];
+const CONVERSION_CANDIDATOS = ["conversion", "conversion_plg_a_mm", "cantidad_en_mm_es_conversion", "cantidad_en_mm_es_conversion_plg_a_mm"];
+const TIPO_CANDIDATOS = ["_6_Tipo_de_lluvia"];
 
 export default {
   async fetch(request, env) {
@@ -12,52 +26,13 @@ export default {
     if (url.pathname === "/api/data") {
       return handleKoboProxy(env);
     }
-
     if (url.pathname === "/api/debug") {
       return handleDebug(env);
     }
 
-    // Cualquier otra ruta: sirve el archivo estático correspondiente (index.html, etc.)
     return env.ASSETS.fetch(request);
   }
 };
-
-// Ruta de diagnóstico: muestra la forma real del esquema del formulario y un
-// registro de ejemplo, para poder ver exactamente qué nombres de campo usa Kobo
-// sin tener que descargar los ~6000 registros completos.
-async function handleDebug(env) {
-  if (!env.KOBO_TOKEN) {
-    return jsonResponse({ error: "Falta configurar el secret KOBO_TOKEN en Cloudflare." }, 500);
-  }
-  try {
-    const headers = { Authorization: `Token ${env.KOBO_TOKEN}` };
-
-    const assetRes = await fetch(`${KOBO_SERVER}/api/v2/assets/${ASSET_UID}/?format=json`, { headers });
-    const assetOk = assetRes.ok;
-    const assetJson = assetOk ? await assetRes.json() : null;
-
-    const survey = assetJson?.content?.survey || [];
-    const choices = assetJson?.content?.choices || [];
-    const schema = assetJson ? buildSchema(assetJson) : null;
-
-    const dataRes = await fetch(`${KOBO_SERVER}/api/v2/assets/${ASSET_UID}/data/?format=json`, { headers });
-    const dataJson = dataRes.ok ? await dataRes.json() : null;
-    const muestra = dataJson && dataJson.results && dataJson.results.length ? dataJson.results[0] : null;
-    const totalCount = dataJson ? dataJson.count : null;
-
-    return jsonResponse({
-      asset_fetch_ok: assetOk,
-      asset_fetch_status: assetRes.status,
-      survey_preguntas: survey.map(q => ({ type: q.type, name: q.name, label: q.label, select_from_list_name: q.select_from_list_name })),
-      choices_listas: choices.map(c => ({ list_name: c.list_name, name: c.name, label: c.label })),
-      schema_detectado: schema,
-      total_registros_reportado_por_kobo: totalCount,
-      registro_de_muestra: muestra
-    }, 200);
-  } catch (err) {
-    return jsonResponse({ error: String(err) }, 500);
-  }
-}
 
 async function handleKoboProxy(env) {
   if (!env.KOBO_TOKEN) {
@@ -67,22 +42,6 @@ async function handleKoboProxy(env) {
   try {
     const headers = { Authorization: `Token ${env.KOBO_TOKEN}` };
 
-    // 1. Traer la definición del formulario (preguntas + opciones) para saber
-    //    con certeza cuál es cada campo y traducir códigos de opciones a texto legible,
-    //    en vez de adivinar por nombre de columna.
-    let schema = null;
-    try {
-      const assetRes = await fetch(`${KOBO_SERVER}/api/v2/assets/${ASSET_UID}/?format=json`, { headers });
-      if (assetRes.ok) {
-        const assetJson = await assetRes.json();
-        schema = buildSchema(assetJson);
-      }
-    } catch (e) {
-      schema = null; // si falla, seguimos sin esquema y el frontend hace fallback
-    }
-
-    // 2. Traer TODOS los registros, siguiendo "next" hasta el final.
-    //    Sin límite artificial de páginas (antes se cortaba a las 20 páginas).
     let allResults = [];
     let nextUrl = `${KOBO_SERVER}/api/v2/assets/${ASSET_UID}/data/?format=json`;
     let safety = 0;
@@ -97,13 +56,10 @@ async function handleKoboProxy(env) {
       safety++;
     }
 
-    const camposEsenciales = schema && schema.fechaKey && schema.lugarKey && schema.lluviaKey;
-    const records = camposEsenciales
-      ? allResults.map(r => resolveRecord(r, schema))
-      : allResults;
+    const records = allResults.map(resolveRecord);
 
     return jsonResponse(
-      { records, resolved: !!camposEsenciales, schema, total: records.length },
+      { records, resolved: true, total: records.length },
       200,
       { "Cache-Control": "public, max-age=300" }
     );
@@ -113,57 +69,62 @@ async function handleKoboProxy(env) {
   }
 }
 
-// Construye un mapa: qué campo del formulario es la fecha, cuál el lugar/observador,
-// cuál la cantidad de lluvia, y cuál el tipo de lluvia (con sus opciones reales).
-function buildSchema(assetJson) {
-  try {
-    const survey = (assetJson && assetJson.content && assetJson.content.survey) || [];
-    const choices = (assetJson && assetJson.content && assetJson.content.choices) || [];
-
-    function findQuestion(labelRegex, typeRegex) {
-      return survey.find(q => {
-        if (typeRegex && !typeRegex.test(q.type || "")) return false;
-        const label = Array.isArray(q.label) ? (q.label[0] || "") : (q.label || "");
-        return labelRegex.test(label) || labelRegex.test(q.name || "");
-      });
-    }
-
-    const qFecha = findQuestion(/fecha/i, /date/i) || findQuestion(/fecha/i);
-    const qLugar = findQuestion(/ubicac|observador|nombre/i);
-    const qLluvia = findQuestion(/lluvia|cantidad/i, /decimal|integer/i);
-    const qTipo = findQuestion(/tipo/i, /^select_one/i);
-
-    const tipoChoices = {};
-    if (qTipo) {
-      const listName = qTipo.select_from_list_name ||
-        (qTipo.type && qTipo.type.indexOf(" ") > -1 ? qTipo.type.split(" ")[1] : null);
-      choices
-        .filter(c => c.list_name === listName)
-        .forEach(c => {
-          tipoChoices[c.name] = Array.isArray(c.label) ? c.label[0] : c.label;
-        });
-    }
-
-    return {
-      fechaKey: qFecha ? qFecha.name : null,
-      lugarKey: qLugar ? qLugar.name : null,
-      lluviaKey: qLluvia ? qLluvia.name : null,
-      tipoKey: qTipo ? qTipo.name : null,
-      tipoChoices
-    };
-  } catch (e) {
-    return null;
+function primerValor(r, candidatos) {
+  for (const k of candidatos) {
+    if (r[k] !== undefined && r[k] !== null && r[k] !== "") return r[k];
   }
+  return null;
 }
 
-function resolveRecord(r, schema) {
-  const fecha = (schema.fechaKey && r[schema.fechaKey]) || r["_submission_time"];
-  const lugar = (schema.lugarKey && r[schema.lugarKey]) || null;
-  const mm = (schema.lluviaKey && r[schema.lluviaKey]) || null;
-  const tipoRaw = (schema.tipoKey && r[schema.tipoKey]) || null;
-  const tipo = tipoRaw ? (schema.tipoChoices[tipoRaw] || tipoRaw) : null;
+function numeroValido(v) {
+  if (v === null || v === undefined || v === "" || v === "NaN") return null;
+  const n = parseFloat(String(v).replace(",", "."));
+  return isNaN(n) ? null : n;
+}
+
+function resolveRecord(r) {
+  const fecha = primerValor(r, FECHA_CANDIDATOS) || r["_submission_time"];
+  const lugar = primerValor(r, LUGAR_CANDIDATOS);
+
+  // Cantidad de lluvia: prioridad mm directo -> conversión ya calculada -> pulgadas * 25.4
+  let mm = numeroValido(primerValor(r, MM_DIRECTO_CANDIDATOS));
+  if (mm === null) {
+    mm = numeroValido(primerValor(r, CONVERSION_CANDIDATOS));
+  }
+  if (mm === null) {
+    const plg = numeroValido(primerValor(r, PLG_CANDIDATOS));
+    if (plg !== null) mm = Math.round(plg * 25.4 * 100) / 100;
+  }
+
+  // Tipo de lluvia: quitar prefijo numérico de versiones viejas del formulario (ej. "1__nublado" -> "nublado")
+  let tipo = primerValor(r, TIPO_CANDIDATOS);
+  if (tipo) tipo = String(tipo).replace(/^\d+__/, "");
 
   return { fecha, lugar, mm, tipo };
+}
+
+// Ruta de diagnóstico: confirma qué candidatos de campo sí tienen datos reales,
+// sin tener que descargar el archivo completo.
+async function handleDebug(env) {
+  if (!env.KOBO_TOKEN) {
+    return jsonResponse({ error: "Falta configurar el secret KOBO_TOKEN en Cloudflare." }, 500);
+  }
+  try {
+    const headers = { Authorization: `Token ${env.KOBO_TOKEN}` };
+    const res = await fetch(`${KOBO_SERVER}/api/v2/assets/${ASSET_UID}/data/?format=json&limit=5`, { headers });
+    const page = res.ok ? await res.json() : null;
+    const muestraCruda = page && page.results ? page.results[0] : null;
+    const muestraResuelta = muestraCruda ? resolveRecord(muestraCruda) : null;
+
+    return jsonResponse({
+      total_reportado_por_kobo: page ? page.count : null,
+      claves_del_registro_crudo: muestraCruda ? Object.keys(muestraCruda) : [],
+      registro_crudo_de_muestra: muestraCruda,
+      registro_resuelto_de_muestra: muestraResuelta
+    }, 200);
+  } catch (err) {
+    return jsonResponse({ error: String(err) }, 500);
+  }
 }
 
 function jsonResponse(body, status = 200, extraHeaders = {}) {
