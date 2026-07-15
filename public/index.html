@@ -526,7 +526,7 @@ function toNumber(v){
 }
 function prettify(slug){
   if (!slug) return 'Sin dato';
-  return String(slug).replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
+  return String(slug).replace(/_+/g, ' ').trim().replace(/\b\w/g, c => c.toUpperCase());
 }
 function hashColor(str){
   let h = 0;
