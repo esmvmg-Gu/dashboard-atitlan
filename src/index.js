@@ -13,10 +13,51 @@ export default {
       return handleKoboProxy(env);
     }
 
+    if (url.pathname === "/api/debug") {
+      return handleDebug(env);
+    }
+
     // Cualquier otra ruta: sirve el archivo estático correspondiente (index.html, etc.)
     return env.ASSETS.fetch(request);
   }
 };
+
+// Ruta de diagnóstico: muestra la forma real del esquema del formulario y un
+// registro de ejemplo, para poder ver exactamente qué nombres de campo usa Kobo
+// sin tener que descargar los ~6000 registros completos.
+async function handleDebug(env) {
+  if (!env.KOBO_TOKEN) {
+    return jsonResponse({ error: "Falta configurar el secret KOBO_TOKEN en Cloudflare." }, 500);
+  }
+  try {
+    const headers = { Authorization: `Token ${env.KOBO_TOKEN}` };
+
+    const assetRes = await fetch(`${KOBO_SERVER}/api/v2/assets/${ASSET_UID}/?format=json`, { headers });
+    const assetOk = assetRes.ok;
+    const assetJson = assetOk ? await assetRes.json() : null;
+
+    const survey = assetJson?.content?.survey || [];
+    const choices = assetJson?.content?.choices || [];
+    const schema = assetJson ? buildSchema(assetJson) : null;
+
+    const dataRes = await fetch(`${KOBO_SERVER}/api/v2/assets/${ASSET_UID}/data/?format=json`, { headers });
+    const dataJson = dataRes.ok ? await dataRes.json() : null;
+    const muestra = dataJson && dataJson.results && dataJson.results.length ? dataJson.results[0] : null;
+    const totalCount = dataJson ? dataJson.count : null;
+
+    return jsonResponse({
+      asset_fetch_ok: assetOk,
+      asset_fetch_status: assetRes.status,
+      survey_preguntas: survey.map(q => ({ type: q.type, name: q.name, label: q.label, select_from_list_name: q.select_from_list_name })),
+      choices_listas: choices.map(c => ({ list_name: c.list_name, name: c.name, label: c.label })),
+      schema_detectado: schema,
+      total_registros_reportado_por_kobo: totalCount,
+      registro_de_muestra: muestra
+    }, 200);
+  } catch (err) {
+    return jsonResponse({ error: String(err) }, 500);
+  }
+}
 
 async function handleKoboProxy(env) {
   if (!env.KOBO_TOKEN) {
@@ -56,12 +97,13 @@ async function handleKoboProxy(env) {
       safety++;
     }
 
-    const records = schema
+    const camposEsenciales = schema && schema.fechaKey && schema.lugarKey && schema.lluviaKey;
+    const records = camposEsenciales
       ? allResults.map(r => resolveRecord(r, schema))
       : allResults;
 
     return jsonResponse(
-      { records, resolved: !!schema, schema, total: records.length },
+      { records, resolved: !!camposEsenciales, schema, total: records.length },
       200,
       { "Cache-Control": "public, max-age=300" }
     );
