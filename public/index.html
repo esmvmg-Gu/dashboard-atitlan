@@ -796,27 +796,41 @@ async function cargarDatos(){
   const statusText = document.getElementById('statusText');
   try {
     const res = await fetch('/api/data');
-    const data = await res.json();
+    const payload = await res.json();
 
-    if (data.error) throw new Error(data.error);
+    if (payload.error) throw new Error(payload.error);
+
+    const data = payload.records || [];
     if (!Array.isArray(data) || data.length === 0){
       statusText.textContent = 'sin registros disponibles todavía';
       document.getElementById('tableBody').innerHTML = '<tr><td colspan="4" class="empty-note">Aún no hay lecturas en el formulario.</td></tr>';
       return;
     }
 
-    const { fechaKey, lugarKey, lluviaKey, tipoKey } = detectarColumnas(data);
-
-    TODOS = data.map(r => ({
-      fecha: r[fechaKey] ? new Date(r[fechaKey]) : null,
-      lugar: lugarKey ? (r[lugarKey] || 'Sin dato') : 'Sin dato',
-      mm: toNumber(lluviaKey ? r[lluviaKey] : null),
-      tipo: tipoKey ? (r[tipoKey] || null) : null
-    })).filter(r => r.fecha && !isNaN(r.fecha.getTime()));
+    if (payload.resolved) {
+      // El worker ya identificó los campos usando la definición real del formulario
+      // (fecha, lugar, mm, tipo con etiquetas traducidas) — se usan directo.
+      TODOS = data.map(r => ({
+        fecha: r.fecha ? new Date(r.fecha) : null,
+        lugar: r.lugar || 'Sin dato',
+        mm: toNumber(r.mm),
+        tipo: r.tipo || null
+      })).filter(r => r.fecha && !isNaN(r.fecha.getTime()));
+    } else {
+      // Fallback: el worker no pudo leer el esquema del formulario (p. ej. sin permiso),
+      // así que adivinamos las columnas por palabras clave sobre los datos crudos.
+      const { fechaKey, lugarKey, lluviaKey, tipoKey } = detectarColumnas(data);
+      TODOS = data.map(r => ({
+        fecha: r[fechaKey] ? new Date(r[fechaKey]) : null,
+        lugar: lugarKey ? (r[lugarKey] || 'Sin dato') : 'Sin dato',
+        mm: toNumber(lluviaKey ? r[lluviaKey] : null),
+        tipo: tipoKey ? (r[tipoKey] || null) : null
+      })).filter(r => r.fecha && !isNaN(r.fecha.getTime()));
+    }
 
     TODOS.sort((a,b) => b.fecha - a.fecha);
 
-    statusText.textContent = 'conectado — ' + TODOS.length + ' lecturas sincronizadas';
+    statusText.textContent = 'conectado — ' + TODOS.length + ' lecturas sincronizadas' + (payload.resolved ? '' : ' (modo aproximado)');
 
     poblarFiltros();
     renderMetaHero();
