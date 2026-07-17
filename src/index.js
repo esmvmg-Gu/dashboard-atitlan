@@ -44,6 +44,11 @@ const TIPO_CANDIDATOS = [
   "_6_Tipo_de_lluvia"
 ];
 
+// Umbral físico razonable para una sola lectura de pluviómetro (mm). El récord
+// mundial de lluvia en 24h ronda los 1800mm; cualquier valor por encima de esto
+// casi seguro es un error de captura (ej. escribir "80000" en vez de "8.0").
+const UMBRAL_MM_INVALIDO = 500;
+
 // Traduce las 3 versiones de códigos que ha usado el formulario a través del tiempo
 // a una sola etiqueta legible en español.
 const TIPO_MAP = {
@@ -133,7 +138,13 @@ function resolveRecord(r) {
 
   const tipo = resolveTipo(primerValor(r, TIPO_CANDIDATOS));
 
-  return { fecha, lugar, mm, tipo };
+  let mmInvalido = false;
+  if (mm !== null && mm > UMBRAL_MM_INVALIDO) {
+    mmInvalido = true;
+    mm = null; // se excluye de sumas/promedios, pero se conserva el aviso
+  }
+
+  return { fecha, lugar, mm, mm_invalido: mmInvalido, tipo };
 }
 
 async function handleDebug(env) {
