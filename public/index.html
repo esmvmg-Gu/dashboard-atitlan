@@ -366,6 +366,10 @@ footer{
   <b>Observadores sin reportar recientemente:</b> <span id="alertChips"></span>
 </div>
 
+<div class="alert-banner" id="qualityBanner" style="border-left-color:#8fc7cf;">
+  <span id="qualityText"></span>
+</div>
+
 <div class="controls font-ui">
   <div>
     <label for="fEstacion">Observador / lugar</label>
@@ -602,6 +606,21 @@ function renderMetaHero(){
   document.getElementById('metaTotalMM').textContent = Math.round(TODOS.reduce((a,r) => a + (r.mm||0), 0)).toLocaleString('es-GT');
 }
 
+function renderCalidad(){
+  const invalidas = TODOS.filter(r => r.mmInvalido).length;
+  const sinObservador = TODOS.filter(r => !r.lugar || r.lugar === 'Sin dato').length;
+
+  const banner = document.getElementById('qualityBanner');
+  if (invalidas === 0 && sinObservador === 0){ banner.classList.remove('show'); return; }
+
+  const partes = [];
+  if (invalidas > 0) partes.push(`<b>${invalidas}</b> lectura${invalidas===1?'':'s'} con valor fuera de rango físico razonable (posible error de captura) — excluida${invalidas===1?'':'s'} de los totales`);
+  if (sinObservador > 0) partes.push(`<b>${sinObservador}</b> lectura${sinObservador===1?'':'s'} sin observador identificado — no aparece${sinObservador===1?'':'n'} en el ranking por observador, pero sí en el total de lluvia`);
+
+  document.getElementById('qualityText').innerHTML = partes.join(' · ');
+  banner.classList.add('show');
+}
+
 function renderAlertas(){
   const hoy = new Date();
   const ultima = {};
@@ -647,7 +666,7 @@ function buildKPIs(filtered){
   document.getElementById('kpiProm').textContent = filtered.length ? (total/filtered.length).toFixed(1) + ' mm' : '–';
 
   const byLugar = {};
-  filtered.forEach(r => { byLugar[r.lugar] = (byLugar[r.lugar]||0) + (r.mm||0); });
+  filtered.filter(r => r.lugar && r.lugar !== 'Sin dato').forEach(r => { byLugar[r.lugar] = (byLugar[r.lugar]||0) + (r.mm||0); });
   const top = Object.entries(byLugar).sort((a,b) => b[1]-a[1])[0];
   document.getElementById('kpiTop').textContent = top ? top[0] : '–';
   document.getElementById('kpiTopSub').textContent = top ? Math.round(top[1]) + ' mm acumulados' : '–';
@@ -686,7 +705,7 @@ function buildTimeline(filtered){
 
 function buildLugar(filtered){
   const byLugar = {};
-  filtered.forEach(r => { byLugar[r.lugar] = (byLugar[r.lugar]||0) + (r.mm||0); });
+  filtered.filter(r => r.lugar && r.lugar !== 'Sin dato').forEach(r => { byLugar[r.lugar] = (byLugar[r.lugar]||0) + (r.mm||0); });
   const entries = Object.entries(byLugar).sort((a,b) => b[1]-a[1]);
   const labels = entries.map(e => e[0]);
   const values = entries.map(e => Math.round(e[1]*10)/10);
@@ -814,6 +833,7 @@ async function cargarDatos(){
         fecha: r.fecha ? new Date(r.fecha) : null,
         lugar: r.lugar || 'Sin dato',
         mm: toNumber(r.mm),
+        mmInvalido: !!r.mm_invalido,
         tipo: r.tipo || null
       })).filter(r => r.fecha && !isNaN(r.fecha.getTime()));
     } else {
@@ -835,6 +855,7 @@ async function cargarDatos(){
     poblarFiltros();
     renderMetaHero();
     renderAlertas();
+    renderCalidad();
     applyFilters();
 
   } catch (err) {
