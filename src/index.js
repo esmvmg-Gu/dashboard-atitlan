@@ -18,10 +18,10 @@ const FECHA_CANDIDATOS = [
   "_1_Fecha_y_hora_en_q_e_se_toma_la_lectura"
 ];
 const LUGAR_CANDIDATOS = [
-  GRUPO + "_2_Nombre_del_observador",
-  GRUPO + "_2_Ubicaci_n_Nombre_del_observador",
   "_2_Ubicaci_n_Nombre_del_observador",
-  "_2_Nombre_del_observador"
+  "_2_Nombre_del_observador",
+  GRUPO + "_2_Nombre_del_observador",
+  GRUPO + "_2_Ubicaci_n_Nombre_del_observador"
 ];
 const MM_DIRECTO_CANDIDATOS = [
   GRUPO + "_4_cantidad_de_lluvia_mm",
@@ -47,6 +47,47 @@ const UBICACION_FISICA_CANDIDATOS = [
   GRUPO + "_3_Lugar_donde_se_ubica_el_pluvi_metro",
   "_3_Lugar_donde_se_ubica_el_pluvi_metro"
 ];
+
+// Tabla confirmada por la organización: código original -> nombre completo -> estación.
+const LUGAR_INFO = {
+  gladys:   { codigo:"SM",  nombre:"Gladys",         estacion:"Santa Maria Visitación" },
+  eliseo:   { codigo:"PQ",  nombre:"Eliseo Bixcul",  estacion:"Paquip" },
+  armando:  { codigo:"PJ",  nombre:"Armando",        estacion:"Pahaj" },
+  juan:     { codigo:"PL",  nombre:"Juan Ajpacajá",  estacion:"Palestina, San Juan la Laguna" },
+  pablo:    { codigo:"PS",  nombre:"Pablo Chacom",   estacion:"Pasajquim" },
+  santos:   { codigo:"CEDRACC", nombre:"Santos Saminez", estacion:"Chuitzanchaj - CEDRACC" },
+  emilio:   { codigo:"PMG", nombre:"Emilio Cuj",     estacion:null },
+  vinicio:  { codigo:"BV",  nombre:"Vinicio",        estacion:null },
+  eduardo:  { codigo:"CH",  nombre:"Eduardo Saloj",  estacion:"Chuquel" },
+  pedro:    { codigo:"XP",  nombre:"Pedro Zabala",   estacion:"El Progreso Xajaxac" },
+  luis:     { codigo:"QX",  nombre:"Luis",           estacion:"Quixaya, San Lucas Tolimán" },
+  patricia: { codigo:"QX",  nombre:"Patricia",       estacion:"Quixaya, San Lucas Tolimán" },
+  manuel:   { codigo:"PN",  nombre:"Manuel Juracan", estacion:"Panimatzalam" },
+  victor:   { codigo:"PAT", nombre:"Victor Sacuj",   estacion:null },
+  jeymi:    { codigo:"IX",  nombre:"Jeymi Yon",      estacion:"Nueva Santa Catarina Ixtahucan" },
+  ubaldo:   { codigo:"CHQ", nombre:"Ubaldo Chumil",  estacion:"Chaquiya" },
+  maynor:   { codigo:"SJC", nombre:"Maynor Cotuc",   estacion:null }
+};
+const INDICE_LUGAR = {};
+Object.entries(LUGAR_INFO).forEach(([base, info]) => {
+  INDICE_LUGAR[base] = info.nombre;
+  INDICE_LUGAR[info.codigo.toLowerCase()] = info.nombre;
+});
+
+// Busca, entre TODOS los candidatos no vacíos, el primero cuyo contenido
+// coincida con un nombre/código conocido. Si ninguno coincide, usa el primer
+// candidato no vacío tal cual (sin traducir), para no perder el dato.
+function mejorValorLugar(r, candidatos) {
+  const noVacios = candidatos.map(k => r[k]).filter(v => v !== undefined && v !== null && v !== "");
+  for (const val of noVacios) {
+    const limpio = String(val).toLowerCase().replace(/^\d+/, "");
+    const tokens = limpio.split(/[_\-\s]+/).filter(Boolean);
+    for (const t of tokens) {
+      if (INDICE_LUGAR[t]) return INDICE_LUGAR[t];
+    }
+  }
+  return noVacios.length ? noVacios[0] : null;
+}
 
 // Traduce los códigos genéricos "option_N" al nombre real del punto, según el
 // orden en que aparecen las opciones en el formulario. ADVERTENCIA: esto es una
@@ -169,7 +210,7 @@ function resolveTipo(raw) {
 
 function resolveRecord(r) {
   const fecha = primerValor(r, FECHA_CANDIDATOS) || r["_submission_time"];
-  const lugar = primerValor(r, LUGAR_CANDIDATOS);
+  const lugar = mejorValorLugar(r, LUGAR_CANDIDATOS);
 
   // Cantidad de lluvia: mm directo -> conversión ya calculada -> pulgadas * 25.4
   let mm = numeroValido(primerValor(r, MM_DIRECTO_CANDIDATOS));
