@@ -56,17 +56,17 @@ const LUGAR_INFO = {
   juan:     { codigo:"PL",  nombre:"Juan Ajpacajá",  estacion:"Palestina, San Juan la Laguna" },
   pablo:    { codigo:"PS",  nombre:"Pablo Chacom",   estacion:"Pasajquim" },
   santos:   { codigo:"CEDRACC", nombre:"Santos Saminez", estacion:"Chuitzanchaj - CEDRACC" },
-  emilio:   { codigo:"PMG", nombre:"Emilio Cuj",     estacion:null },
-  vinicio:  { codigo:"BV",  nombre:"Vinicio",        estacion:null },
-  eduardo:  { codigo:"CH",  nombre:"Eduardo Saloj",  estacion:"Chuquel" },
-  pedro:    { codigo:"XP",  nombre:"Pedro Zabala",   estacion:"El Progreso Xajaxac" },
+  emilio:   { codigo:"PMG", nombre:"Emilio Cuj",     estacion:"Pampojila, San Lucas Tolimán" },
+  vinicio:  { codigo:"BV",  nombre:"Vinicio",        estacion:"Buena Vista" },
+  eduardo:  { codigo:"CH",  nombre:"Eduardo Saloj",  estacion:"Chaquiya" },
+  pedro:    { codigo:"XP",  nombre:"Pedro Zabala",   estacion:"Xesampual" },
   luis:     { codigo:"QX",  nombre:"Luis",           estacion:"Quixaya, San Lucas Tolimán" },
   patricia: { codigo:"QX",  nombre:"Patricia",       estacion:"Quixaya, San Lucas Tolimán" },
   manuel:   { codigo:"PN",  nombre:"Manuel Juracan", estacion:"Panimatzalam" },
-  victor:   { codigo:"PAT", nombre:"Victor Sacuj",   estacion:null },
+  victor:   { codigo:"PAT", nombre:"Victor Sacuj",   estacion:"Finca Santa Victoria" },
   jeymi:    { codigo:"IX",  nombre:"Jeymi Yon",      estacion:"Nueva Santa Catarina Ixtahucan" },
-  ubaldo:   { codigo:"CHQ", nombre:"Ubaldo Chumil",  estacion:"Chaquiya" },
-  maynor:   { codigo:"SJC", nombre:"Maynor Cotuc",   estacion:null }
+  ubaldo:   { codigo:"CHQ", nombre:"Ubaldo Chumil",  estacion:"Chuiquel" },
+  maynor:   { codigo:"SJC", nombre:"Maynor Cotuc",   estacion:"San Jose Chacaya" }
 };
 const INDICE_LUGAR = {};
 Object.entries(LUGAR_INFO).forEach(([base, info]) => {
