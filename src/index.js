@@ -181,7 +181,7 @@ async function handleKoboProxy(env) {
     return jsonResponse(
       { records, resolved: true, total: records.length },
       200,
-      { "Cache-Control": "public, max-age=300" }
+      { "Cache-Control": "no-store" }
     );
   } catch (err) {
     return jsonResponse({ error: "No se pudo conectar con KoboToolbox.", detail: String(err) }, 500);
