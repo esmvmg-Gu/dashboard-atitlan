@@ -176,7 +176,10 @@ async function handleKoboProxy(env) {
       safety++;
     }
 
-    const records = allResults.map(resolveRecord);
+    const FECHA_MINIMA = new Date("2026-01-01T00:00:00");
+    const records = allResults
+      .map(resolveRecord)
+      .filter(r => r.fecha && new Date(r.fecha) >= FECHA_MINIMA);
 
     return jsonResponse(
       { records, resolved: true, total: records.length },
@@ -282,9 +285,23 @@ async function handleAudit(env) {
       if (rec.fecha && (!porLugarCrudo[key].max || rec.fecha > porLugarCrudo[key].max)) porLugarCrudo[key].max = rec.fecha;
     });
 
+    // Encuentra el registro con la fecha de envío más reciente, para comparar
+    // su estructura de campos contra el registro más viejo (pueden diferir).
+    let masReciente = null;
+    let fechaMasReciente = null;
+    allResults.forEach(r => {
+      const f = r["_submission_time"] ? new Date(r["_submission_time"]) : null;
+      if (f && (!fechaMasReciente || f > fechaMasReciente)) {
+        fechaMasReciente = f;
+        masReciente = r;
+      }
+    });
+
     return jsonResponse({
       total_registros: allResults.length,
-      valores_crudos_de_lugar: porLugarCrudo
+      valores_crudos_de_lugar: porLugarCrudo,
+      registro_mas_reciente_crudo: masReciente,
+      registro_mas_reciente_resuelto: masReciente ? resolveRecord(masReciente) : null
     }, 200);
   } catch (err) {
     return jsonResponse({ error: String(err) }, 500);
